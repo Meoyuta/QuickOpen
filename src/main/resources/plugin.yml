@@ -1,0 +1,5 @@
+name: QuickOpen
+version: 1.0.2
+main: com.quickopen.QuickOpen
+api-version: '1.21'
+description: Right-click crafting tables and shulker boxes in inventory to open them quickly
