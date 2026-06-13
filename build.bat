@@ -3,103 +3,70 @@ setlocal enabledelayedexpansion
 
 REM ============================================================
 REM  QuickOpen Build Script
-REM  Auto-detects JDK 17 or 21 (skips JDK 25)
+REM  Uses JDK 17 or 21 from PATH, then JAVA_HOME.
 REM ============================================================
 
 set "JAVA_FOUND="
+set "JAVA_BIN="
+set "PATH_JAVAC_FOUND="
 
-REM --- 0. Known JDK path ---
-if exist "D:\java\jdk-21\bin\javac.exe" (
-    set "JAVA_HOME=D:\java\jdk-21"
-    set "JAVA_FOUND=yes"
-    echo [INFO] Found JDK: D:\java\jdk-21
-    goto :build
+REM --- 1. Check javac from PATH ---
+for /f "delims=" %%J in ('where javac 2^>nul') do (
+    set "PATH_JAVAC_FOUND=yes"
+    if not defined JAVA_FOUND (
+        "%%J" -version 2>&1 | findstr /c:"17." /c:"21." >nul 2>&1
+        if !errorlevel! == 0 (
+            for %%P in ("%%~dpJ..") do set "JAVA_HOME=%%~fP"
+            set "JAVA_BIN=%%~dpJ"
+            set "JAVA_FOUND=yes"
+            echo [INFO] Using JDK from PATH: %%J
+        )
+    )
 )
 
-REM --- 1. Check JAVA_HOME environment variable ---
+if defined JAVA_FOUND goto :build
+if defined PATH_JAVAC_FOUND (
+    echo [WARN] javac was found in PATH, but it is not JDK 17 or 21.
+)
+
+REM --- 2. Check JAVA_HOME environment variable ---
 if defined JAVA_HOME (
-    "%JAVA_HOME%\bin\javac" -version 2>nul | findstr /r "17\.\|21\." >nul 2>&1
-    if !errorlevel! == 0 (
-        set "JAVA_HOME=%JAVA_HOME%"
-        set "JAVA_FOUND=yes"
-        echo [INFO] Using JAVA_HOME: %JAVA_HOME%
-        goto :build
+    if exist "%JAVA_HOME%\bin\javac.exe" (
+        "%JAVA_HOME%\bin\javac.exe" -version 2>&1 | findstr /c:"17." /c:"21." >nul 2>&1
+        if !errorlevel! == 0 (
+            set "JAVA_BIN=%JAVA_HOME%\bin"
+            set "JAVA_FOUND=yes"
+            echo [INFO] Using JAVA_HOME: %JAVA_HOME%
+            goto :build
+        ) else (
+            echo [WARN] JAVA_HOME is set, but it is not JDK 17 or 21: %JAVA_HOME%
+        )
+    ) else (
+        echo [WARN] JAVA_HOME is set, but javac was not found: %JAVA_HOME%\bin\javac.exe
     )
-)
-
-REM --- 2. Search common JDK install directories ---
-for /d %%D in (
-    "C:\Program Files\Java\jdk-21*"
-    "C:\Program Files\Java\jdk-17*"
-    "C:\Program Files\Eclipse Adoptium\jdk-21*"
-    "C:\Program Files\Eclipse Adoptium\jdk-17*"
-    "C:\Program Files\Microsoft\jdk-21*"
-    "C:\Program Files\Microsoft\jdk-17*"
-    "C:\Program Files\Zulu\zulu-21*"
-    "C:\Program Files\Zulu\zulu-17*"
-    "%USERPROFILE%\.jdks\jdk-21*"
-    "%USERPROFILE%\.jdks\jdk-17*"
-    "%LOCALAPPDATA%\Programs\Eclipse Adoptium\jdk-21*"
-    "%LOCALAPPDATA%\Programs\Eclipse Adoptium\jdk-17*"
-    "%APPDATA%\Java\jdk-21*"
-    "%APPDATA%\Java\jdk-17*"
-) do (
-    if exist "%%~D\bin\javac.exe" (
-        set "JAVA_HOME=%%~D"
-        set "JAVA_FOUND=yes"
-        echo [INFO] Found JDK: %%~D
-        goto :build
-    )
-)
-
-REM --- 3. Search entire Program Files tree (slower fallback) ---
-for /f "delims=" %%D in ('dir /s /b /ad "C:\Program Files\*jdk*17*" 2^>nul ^| findstr /i "jdk"') do (
-    if exist "%%D\bin\javac.exe" (
-        set "JAVA_HOME=%%D"
-        set "JAVA_FOUND=yes"
-        echo [INFO] Found JDK: %%D
-        goto :build
-    )
-)
-for /f "delims=" %%D in ('dir /s /b /ad "C:\Program Files\*jdk*21*" 2^>nul ^| findstr /i "jdk"') do (
-    if exist "%%D\bin\javac.exe" (
-        set "JAVA_HOME=%%D"
-        set "JAVA_FOUND=yes"
-        echo [INFO] Found JDK: %%D
-        goto :build
-    )
-)
-
-REM --- 4. Try JAVA_HOME_17 / JAVA_HOME_21 env vars ---
-if defined JAVA_HOME_17 (
-    set "JAVA_HOME=%JAVA_HOME_17%"
-    set "JAVA_FOUND=yes"
-    echo [INFO] Using JAVA_HOME_17: %JAVA_HOME_17%
-    goto :build
-)
-if defined JAVA_HOME_21 (
-    set "JAVA_HOME=%JAVA_HOME_21%"
-    set "JAVA_FOUND=yes"
-    echo [INFO] Using JAVA_HOME_21: %JAVA_HOME_21%
-    goto :build
 )
 
 REM --- Not found ---
 echo [ERROR] Cannot find JDK 17 or 21.
 echo.
-echo Please install JDK 17 or 21, then either:
-echo   1. Set JAVA_HOME to point to the JDK directory
-echo   2. Set JAVA_HOME_17 or JAVA_HOME_21 environment variable
-echo   3. Install to one of the standard directories:
-echo      C:\Program Files\Java\jdk-17.x.x
-echo      C:\Program Files\Java\jdk-21.x.x
+echo Please either:
+echo   1. Add JDK 17 or 21 javac to PATH
+echo   2. Set JAVA_HOME to point to a JDK 17 or 21 directory
 echo.
 exit /b 1
 
 :build
+if defined JAVA_BIN (
+    set "PATH=%JAVA_BIN%;%PATH%"
+)
+
 echo.
 echo ============================================================
-echo  Building QuickOpen with: %JAVA_HOME%
+if defined JAVA_HOME (
+    echo  Building QuickOpen with: %JAVA_HOME%
+) else (
+    echo  Building QuickOpen with javac from PATH
+)
 echo ============================================================
 echo.
 
@@ -107,11 +74,10 @@ REM --- Check for Maven ---
 where mvn >nul 2>&1
 if %errorlevel% == 0 (
     echo [INFO] Found Maven, building with mvn package...
-    set "PATH=%JAVA_HOME%\bin;%PATH%"
     call mvn clean package -q
     if %errorlevel% == 0 (
         echo.
-        echo [SUCCESS] Build complete! JAR is in target\ directory.
+        echo [SUCCESS] Build complete. JAR is in target\ directory.
         dir /b target\QuickOpen-*.jar 2>nul
     ) else (
         echo.
@@ -124,28 +90,32 @@ if %errorlevel% == 0 (
 REM --- Maven not found, manual compile ---
 echo [WARN] Maven not found. Attempting manual compilation...
 
-set "PATH=%JAVA_HOME%\bin;%PATH%"
-set "SPOIGOT_JAR="
+set "SPIGOT_JAR="
+set "PLUGIN_VERSION=1.0.0"
+
+for /f "tokens=2 delims=: " %%V in ('findstr /b "version:" src\main\resources\plugin.yml') do (
+    set "PLUGIN_VERSION=%%V"
+)
 
 REM Search for Spigot API jar
 for /f "delims=" %%F in ('dir /s /b "%USERPROFILE%\.m2\repository\org\spigotmc\spigot-api\*.jar" 2^>nul ^| findstr /v sources ^| findstr /v javadoc') do (
-    set "SPOIGOT_JAR=%%F"
+    set "SPIGOT_JAR=%%F"
     goto :found_spigot
 )
 :found_spigot
 
-if not defined SPOIGOT_JAR (
+if not defined SPIGOT_JAR (
     echo [ERROR] Spigot API jar not found in local Maven cache.
     echo Please install Maven first and run this script again to download dependencies.
     echo Download: https://maven.apache.org/download.cgi
     exit /b 1
 )
 
-echo [INFO] Using Spigot API: %SPOIGOT_JAR%
+echo [INFO] Using Spigot API: %SPIGOT_JAR%
 
 if not exist "target\classes" mkdir target\classes
 
-javac -cp "%SPOIGOT_JAR%" -d target\classes src\main\java\com\quickopen\QuickOpen.java
+javac -cp "%SPIGOT_JAR%" -d target\classes src\main\java\com\quickopen\QuickOpen.java
 if %errorlevel% neq 0 (
     echo [ERROR] Compilation failed.
     exit /b 1
@@ -153,9 +123,9 @@ if %errorlevel% neq 0 (
 
 copy src\main\resources\plugin.yml target\classes\ >nul
 
-jar cf target\QuickOpen-1.0.0.jar -C target\classes .
+jar cf target\QuickOpen-%PLUGIN_VERSION%.jar -C target\classes .
 echo.
-echo [SUCCESS] Build complete! JAR is at target\QuickOpen-1.0.0.jar
+echo [SUCCESS] Build complete. JAR is at target\QuickOpen-%PLUGIN_VERSION%.jar
 
 :done
 echo.
